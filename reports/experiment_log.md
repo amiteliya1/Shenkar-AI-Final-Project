@@ -116,3 +116,26 @@ split, transforms, or the baseline result is implicated.
 both models from the data/inference side (`src/data/transforms.py`, `train.py`'s
 `sliding_window_inference(roi_size=PATCH_SIZE, ...)`), so the fair-comparison property is
 unaffected. Re-run `configs/swin_unetr_smoketest.yaml` next.
+
+### swin_unetr_smoketest — Swin UNETR — 2026-07-09 — PASSED (re-run after the img_size fix)
+
+**Config:** `configs/swin_unetr_smoketest.yaml`, Shenkar gpu partition, 1x NVIDIA L4.
+
+**Result:** Completed both epochs without error. Epoch 1/2: loss 1.3294, val_dice 0.0372.
+Epoch 2/2: loss 1.1233, val_dice 0.1755. Checkpoint saved at
+`outputs/swin_unetr_smoketest/best_model.pt`.
+
+**Analysis:** This confirms the fix worked and the full pipeline (data loading, forward/backward
+pass, mixed-precision, sliding-window validation, checkpointing) runs end-to-end on the L4 —
+that was this run's only purpose. Loss decreasing and val_dice rising across just 2 epochs is
+a good sign the model is learning correctly, but **0.1755 is not comparable to the baseline's
+0.4749** — the baseline trained for 75 epochs before early stopping, this ran for 2. Comparing
+them directly would be misleading; the real comparison happens after the full run below.
+
+**Decision:** Pipeline confirmed correct. Proceed to a full run with `configs/swin_unetr_base.yaml`
+(new), matching `configs/baseline_unet.yaml`'s methodology exactly (Adam, lr=1e-4,
+weight_decay=1e-5, dropout=0.2, max_epochs=100, val_interval=5, early_stopping_patience=20,
+seed=0, same data/split) so the eventual baseline-vs-Swin-UNETR comparison is fair. The one
+deliberate difference is `batch_size=1` (vs. the baseline's 2) — an L4 memory necessity for
+Swin UNETR's heavier attention activations at the same patch size, already justified in the
+Day 5 pre-training setup note above, not a fairness compromise on the data/methodology side.

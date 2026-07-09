@@ -91,5 +91,8 @@ the config file, not the script.
 - [x] Day 3: baseline 3D U-Net + training script. First run (Slurm job 316, NVIDIA L4): best
       val Dice 0.4749, early-stopped at epoch 75/100 — see `reports/experiment_log.md`. Notably
       below the ~0.90+ published range for this task; root cause not yet confirmed.
-- [ ] Day 5: Swin UNETR model + smoke-test config added, not yet run — see below
+- [x] Day 5: Swin UNETR model implemented; smoke test passed on NVIDIA L4 after fixing an
+      `img_size`/MONAI-version incompatibility (see `reports/experiment_log.md`).
+      `configs/swin_unetr_base.yaml` (full 100-epoch run, matched to the baseline's methodology)
+      ready, not yet run.
 - [ ] Day 6 onward: see `reports/experiment_log.md` and the approved project plan

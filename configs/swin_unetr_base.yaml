@@ -1,0 +1,18 @@
+# Day 5 full run: Swin UNETR, matched to configs/baseline_unet.yaml's methodology
+# (same optimizer/lr/weight_decay/dropout/epochs/val_interval/early_stopping/seed/
+# data+split) for a fair comparison. The only intentional difference is
+# batch_size=1 vs. the baseline's 2 -- an L4 memory necessity for Swin UNETR's
+# heavier attention activations at the same 96^3 patch size, not a methodology
+# change (see reports/experiment_log.md).
+run_name: swin_unetr_v1
+model: swin_unetr
+data_dir: data
+max_epochs: 100
+val_interval: 5
+batch_size: 1
+learning_rate: 1.0e-4
+weight_decay: 1.0e-5
+dropout: 0.2
+early_stopping_patience: 20
+num_workers: 4
+seed: 0
