@@ -13,8 +13,19 @@
 #
 # --cpus-per-task=4 matches num_workers=4 in the config files -- keep these in
 # sync if you change one.
-# --mem and --time are conservative placeholders, not measured values -- adjust
-# after seeing real usage from the smoke test (`sacct`, see README/chat notes).
+#
+# --time: job 322 (Swin UNETR, configs/swin_unetr_base.yaml) was cancelled at
+# 30 minutes despite this file requesting --time=04:00:00 at the time -- i.e.
+# something on the cluster (a partition or QOS MaxWallTime) is silently
+# capping the effective limit below what's requested here. Raised to 06:00:00
+# below as a best-effort increase (44 epochs took ~30min, so 100 needs
+# roughly ~70min plus margin), but if the real cap is a hard 30-minute
+# partition/QOS ceiling, this number alone will NOT fix it -- verify with
+# `scontrol show partition gpu` (look at MaxTime) before relying on it.
+# Either way, train.py now supports resuming from outputs/<run_name>/last_checkpoint.pt,
+# so simply resubmitting the same command after a time-limit cancellation
+# continues training instead of restarting from epoch 1.
+# --mem is a conservative placeholder, not a measured value.
 
 #SBATCH --job-name=segmentation_train
 #SBATCH --partition=gpu
@@ -22,7 +33,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-#SBATCH --time=04:00:00
+#SBATCH --time=06:00:00
 #SBATCH --output=SlurmLogs/%x_%j.out
 #SBATCH --error=SlurmLogs/%x_%j.err
 

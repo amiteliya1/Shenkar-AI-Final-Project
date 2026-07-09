@@ -139,3 +139,38 @@ seed=0, same data/split) so the eventual baseline-vs-Swin-UNETR comparison is fa
 deliberate difference is `batch_size=1` (vs. the baseline's 2) — an L4 memory necessity for
 Swin UNETR's heavier attention activations at the same patch size, already justified in the
 Day 5 pre-training setup note above, not a fairness compromise on the data/methodology side.
+
+### swin_unetr_v1 — Swin UNETR — 2026-07-09 — CANCELLED at wall-clock time limit (Slurm job 322)
+
+**Config:** `configs/swin_unetr_base.yaml`, Shenkar gpu partition, 1x NVIDIA L4, requested
+`--time=04:00:00`.
+
+**Result:** `JOB 322 ON slurm-gpu CANCELLED DUE TO TIME LIMIT` at epoch 44/100 (~30 minutes
+elapsed). Best val_dice reached before cancellation: **0.5353 at epoch 35** — already above
+the baseline's final 0.4749, though the run never got to complete or early-stop on its own
+terms, so this isn't yet the real comparison point either.
+
+**Analysis:** Not a modeling problem — the job was cancelled purely on wall-clock time, at 30
+minutes, despite `--time=04:00:00` being requested in `slurm/train.sbatch` at the time. That
+mismatch indicates something on the cluster (partition or QOS `MaxWallTime`) is silently
+capping the effective limit below what's requested, rather than our request being the binding
+constraint. `train.py` had no resume capability, so the partial progress could only be
+discarded and restarted from epoch 1.
+
+**Decision:** Two changes, both in this repo now: (1) `src/train.py` now saves a full
+training-state checkpoint (`outputs/<run_name>/last_checkpoint.pt`: model + optimizer + AMP
+scaler + epoch + early-stopping counters) every epoch and automatically resumes from it if
+present, so a future time-limit cancellation loses at most one epoch of progress instead of the
+whole run; `src/utils/logging.py`'s `RunLogger` now loads any existing `metrics.csv` on
+resume so the learning curve stays continuous across the interruption. (2)
+`slurm/train.sbatch`'s `--time` raised to 06:00:00 as a best-effort increase, with an explicit
+note to verify the partition's actual `MaxTime` since raising the requested number may not be
+the real fix if there's a hard cluster-side cap.
+
+**Important:** job 322 itself ran under the *old* code, which never wrote a `last_checkpoint.pt`
+— only the weights-only `best_model.pt` (epoch 35) exists for it, which the new resume logic
+cannot use (no optimizer/scaler/epoch state). So job 322's 44 epochs of progress cannot be
+recovered; resubmitting `sbatch slurm/train.sbatch configs/swin_unetr_base.yaml` restarts
+`swin_unetr_v1` from epoch 1, now under the resume-capable code. Any *subsequent* cancellation
+of that new run will resume correctly. Same config/dataset/split/val_interval/max_epochs as
+before, so the eventual comparison with the baseline is unaffected by this restart.

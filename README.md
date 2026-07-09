@@ -93,6 +93,8 @@ the config file, not the script.
       below the ~0.90+ published range for this task; root cause not yet confirmed.
 - [x] Day 5: Swin UNETR model implemented; smoke test passed on NVIDIA L4 after fixing an
       `img_size`/MONAI-version incompatibility (see `reports/experiment_log.md`).
-      `configs/swin_unetr_base.yaml` (full 100-epoch run, matched to the baseline's methodology)
-      ready, not yet run.
+      Full run (Slurm job 322) reached val_dice 0.5353 at epoch 35 before being cancelled at
+      epoch 44/100 by a wall-clock time limit. `train.py` now supports resuming from
+      `outputs/<run_name>/last_checkpoint.pt`; job 322 predates this fix so it restarts from
+      epoch 1, but is now safe against future cancellations.
 - [ ] Day 6 onward: see `reports/experiment_log.md` and the approved project plan

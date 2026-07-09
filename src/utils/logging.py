@@ -20,7 +20,23 @@ class RunLogger:
         self.run_dir = Path(run_dir)
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.csv_path = self.run_dir / "metrics.csv"
-        self._rows: list[dict] = []
+        self._rows: list[dict] = self._load_existing_rows()
+
+    def _load_existing_rows(self) -> list[dict]:
+        """Pick up prior epochs' rows if metrics.csv already exists, so a resumed
+        run (see train.py's last_checkpoint.pt) continues the same learning
+        curve instead of overwriting the history from earlier epochs."""
+        if not self.csv_path.exists():
+            return []
+        with open(self.csv_path, newline="") as f:
+            return [
+                {
+                    "epoch": int(row["epoch"]),
+                    "train_loss": float(row["train_loss"]),
+                    "val_dice": float(row["val_dice"]) if row["val_dice"] else None,
+                }
+                for row in csv.DictReader(f)
+            ]
 
     def log(self, epoch: int, train_loss: float, val_dice: Optional[float] = None) -> None:
         self._rows.append({"epoch": epoch, "train_loss": train_loss, "val_dice": val_dice})

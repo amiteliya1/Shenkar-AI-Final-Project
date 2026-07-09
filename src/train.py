@@ -14,6 +14,15 @@ no-risk speed/memory win for the U-Net, and close to a requirement for Swin
 UNETR's much heavier attention activations to fit on a single 24GB L4 at the
 same patch size as the baseline. This only affects future runs -- it does not
 touch or invalidate the already-saved baseline_unet_v1 checkpoint/results.
+
+Resume support: a full training-state checkpoint (model + optimizer + scaler +
+epoch + early-stopping counters) is written to outputs/<run_name>/last_checkpoint.pt
+at the end of every epoch. If that file exists when a run starts, training
+resumes from epoch+1 instead of restarting -- needed since Slurm can cancel a
+job mid-run on a wall-clock time limit (e.g. job 322). This is a separate file
+from best_model.pt (weights-only, unchanged format, still just the best
+checkpoint for evaluation) so resume support doesn't change what evaluate.py
+will load.
 """
 
 from __future__ import annotations
@@ -75,12 +84,23 @@ def train(config: TrainConfig) -> None:
     experiment_dir = Path("experiments") / config.run_name
     checkpoint_dir = Path("outputs") / config.run_name
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    logger = RunLogger(str(experiment_dir))
+    logger = RunLogger(str(experiment_dir))  # picks up any existing metrics.csv rows on resume
 
+    resume_path = checkpoint_dir / "last_checkpoint.pt"
+    start_epoch = 1
     best_val_dice = -1.0
     epochs_without_improvement = 0
+    if resume_path.exists():
+        checkpoint = torch.load(resume_path, map_location=device)
+        model.load_state_dict(checkpoint["model_state"])
+        optimizer.load_state_dict(checkpoint["optimizer_state"])
+        scaler.load_state_dict(checkpoint["scaler_state"])
+        start_epoch = checkpoint["epoch"] + 1
+        best_val_dice = checkpoint["best_val_dice"]
+        epochs_without_improvement = checkpoint["epochs_without_improvement"]
+        print(f"Resuming {resume_path}: starting at epoch {start_epoch}, best_val_dice so far {best_val_dice:.4f}")
 
-    for epoch in range(1, config.max_epochs + 1):
+    for epoch in range(start_epoch, config.max_epochs + 1):
         model.train()
         epoch_loss = 0.0
         for batch in train_loader:
@@ -117,6 +137,18 @@ def train(config: TrainConfig) -> None:
                 torch.save(model.state_dict(), checkpoint_dir / "best_model.pt")
             else:
                 epochs_without_improvement += config.val_interval
+
+        torch.save(
+            {
+                "epoch": epoch,
+                "model_state": model.state_dict(),
+                "optimizer_state": optimizer.state_dict(),
+                "scaler_state": scaler.state_dict(),
+                "best_val_dice": best_val_dice,
+                "epochs_without_improvement": epochs_without_improvement,
+            },
+            resume_path,
+        )
 
         logger.log(epoch=epoch, train_loss=epoch_loss, val_dice=val_dice)
         status = f"epoch {epoch}/{config.max_epochs} - loss {epoch_loss:.4f}"
