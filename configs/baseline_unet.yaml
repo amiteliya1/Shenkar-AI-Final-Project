@@ -1,0 +1,13 @@
+# Day 3: baseline 3D U-Net, first run ("first try" for the process narrative).
+run_name: baseline_unet_v1
+model: unet
+data_dir: data
+max_epochs: 100
+val_interval: 5
+batch_size: 2
+learning_rate: 1.0e-4
+weight_decay: 1.0e-5
+dropout: 0.2
+early_stopping_patience: 20
+num_workers: 4
+seed: 0
