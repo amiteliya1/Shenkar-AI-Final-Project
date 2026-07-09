@@ -24,23 +24,28 @@ GPU memory (NVIDIA L4, 24GB): Swin UNETR's attention layers are considerably
 more memory-hungry per patch than the baseline U-Net's convolutions, so two
 deliberate choices keep it feasible at the *same* 96^3 patch size the
 baseline uses (patch size must match for a fair comparison, per the project
-plan):
+plan -- enforced by both models sharing src/data/transforms.py's PATCH_SIZE
+and train.py's sliding_window_inference(roi_size=PATCH_SIZE, ...), not by
+anything in this file):
   - `feature_size=24` -- MONAI's own default, and the lighter of the two
     configs used in the original Swin UNETR paper (vs. 48 for BraTS).
   - `use_checkpoint=True` -- activation/gradient checkpointing, trading extra
     compute for much lower activation memory.
 Batch size is the other lever, but that's a per-run training hyperparameter
 (configs/*.yaml's `batch_size`), not an architectural one, so it isn't set here.
+
+Note: the installed MONAI release no longer accepts an `img_size` argument
+here -- newer SwinUNETR versions are fully input-size-agnostic at
+construction time (relative position bias is window-size-, not image-size-,
+based), so it was removed entirely rather than reintroduced. The 96^3 patch
+size is still enforced, just from the data/inference side instead.
 """
 
 from monai.networks.nets import SwinUNETR
 
-from src.data.transforms import PATCH_SIZE
-
 
 def build_swin_unetr(dropout: float = 0.2) -> SwinUNETR:
     return SwinUNETR(
-        img_size=PATCH_SIZE,
         in_channels=1,
         out_channels=2,  # background, spleen -- matches unet_baseline.py's convention
         feature_size=24,

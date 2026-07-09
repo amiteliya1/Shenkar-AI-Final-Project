@@ -91,3 +91,28 @@ need revisiting. Flagging this explicitly here so it isn't lost.
   memory reason (does not affect the already-saved baseline_unet_v1 result).
 - **Smoke test only:** `max_epochs=2` — purpose is to confirm the run fits in L4 memory and
   completes end-to-end, not to produce a comparable result yet.
+
+### swin_unetr_smoketest — Swin UNETR — 2026-07-09 — FAILED at model init (Slurm job 319)
+
+**Config:** `configs/swin_unetr_smoketest.yaml`, Shenkar gpu partition, 1x NVIDIA L4.
+
+**Result:** Data loading succeeded (train + val datasets built correctly). Crashed immediately
+at model construction:
+```
+TypeError: SwinUNETR.__init__() got an unexpected keyword argument 'img_size'
+```
+
+**Analysis:** Not a data-pipeline or hyperparameter issue — the installed MONAI release on the
+server has fully removed the `img_size` constructor argument (newer `SwinUNETR` versions are
+input-size-agnostic at construction time; relative position bias is window-size-based, not
+tied to a fixed image size). Root cause: `requirements.txt` pins only a lower bound
+(`monai[nibabel,tqdm]>=1.3`), so pip installed a newer MONAI release than the API `img_size`
+usage assumed, on the server. This was a version-compatibility bug in
+`src/models/swin_unetr_model.py`, not a modeling or fairness problem — nothing about the data
+split, transforms, or the baseline result is implicated.
+
+**Decision:** Removed `img_size` from the `SwinUNETR(...)` call in `src/models/swin_unetr_model.py`
+(and the now-unused `PATCH_SIZE` import). The 96^3 patch size is still enforced identically for
+both models from the data/inference side (`src/data/transforms.py`, `train.py`'s
+`sliding_window_inference(roi_size=PATCH_SIZE, ...)`), so the fair-comparison property is
+unaffected. Re-run `configs/swin_unetr_smoketest.yaml` next.
