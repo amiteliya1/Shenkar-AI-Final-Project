@@ -1,0 +1,22 @@
+# Smoke test only: confirms the Swin UNETR pipeline runs end-to-end on the
+# actual GPU (data loading, forward/backward pass, checkpointing, and that it
+# fits in L4 memory) before committing to a full run. Not a real training result.
+#
+# Same data_dir/split (src/data/dataset.py, seed=0, 80/20) and same 96^3 patch
+# size (src/data/transforms.py) as the baseline U-Net, for a fair comparison.
+# batch_size is lower than the baseline's (1 vs 2) purely as an L4 memory
+# safeguard for Swin UNETR's heavier attention activations -- see
+# src/models/swin_unetr_model.py for the other memory-saving choices
+# (feature_size=24, use_checkpoint=True).
+run_name: swin_unetr_smoketest
+model: swin_unetr
+data_dir: data
+max_epochs: 2
+val_interval: 1
+batch_size: 1
+learning_rate: 1.0e-4
+weight_decay: 1.0e-5
+dropout: 0.2
+early_stopping_patience: 20
+num_workers: 4
+seed: 0

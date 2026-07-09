@@ -45,4 +45,49 @@ run completes.
 
 ## Entries
 
-_(none yet — first entry lands with the Day 3 baseline U-Net run)_
+### baseline_unet_v1 — 3D U-Net (MONAI, InstanceNorm, num_res_units=2) — 2026-07-09
+
+**Config:** `configs/baseline_unet.yaml` (Adam, lr=1e-4, weight_decay=1e-5, dropout=0.2,
+DiceCELoss, batch_size=2 x 4 patches of 96^3, early_stopping_patience=20). Run on Shenkar's
+gpu partition, 1x NVIDIA L4, Slurm job 316.
+
+**Result:** Early-stopped at epoch 75/100 (no val_dice improvement for the configured 20-epoch
+patience). Best validation Dice = **0.4749**, reached around epoch 55. Checkpoint saved at
+`outputs/baseline_unet_v1/best_model.pt`.
+
+**Analysis (provisional — see open questions below):** 0.4749 is well below the ~0.90+ Dice
+that MONAI's own reference U-Net tutorial and nnU-Net report on this exact task (Task09_Spleen)
+with very similar architecture/hyperparameters. In Ch.3's Bias-Variance framing: plateauing for
+20 straight epochs after epoch 55 looks like the model settled into a ceiling rather than still
+slowly improving, which is consistent with either (a) high bias (optimization or model capacity
+genuinely stuck, e.g. learning rate too low/no LR schedule to escape a plateau) or (b) a
+pipeline defect that caps achievable Dice regardless of training time (e.g. a label/prediction
+channel mismatch, or an unverified data-orientation issue) rather than a hyperparameter problem
+per se. Distinguishing (a) from (b) requires the actual train-loss curve alongside val-Dice
+(not yet available on this machine — `experiments/baseline_unet_v1/metrics.csv` and
+`learning_curve.png` live only on the Shenkar server) and confirmation that the Day 2
+`visualize_sample.py` sanity check was actually inspected and looked correct.
+
+**Decision:** Proceeding to Swin UNETR (Day 5) on this baseline result as-is, by explicit
+decision, without having confirmed via `metrics.csv`/`learning_curve.png` whether the low Dice
+is premature early stopping or a pipeline issue. **Open risk carried forward:** since both
+models share the same data pipeline, if the root cause turns out to be a pipeline defect, the
+Swin UNETR numbers will inherit the same ceiling and the comparison between the two will still
+need revisiting. Flagging this explicitly here so it isn't lost.
+
+## Pre-training setup (Day 5, before the Swin UNETR smoke test)
+
+`src/models/swin_unetr_model.py` / `configs/swin_unetr_smoketest.yaml`:
+
+- **Model:** MONAI `SwinUNETR`, `feature_size=24` (MONAI's default, lighter than the 48 used for
+  BraTS in the original paper), **InstanceNorm** (same small-batch rationale as the baseline),
+  `use_checkpoint=True` (activation checkpointing — trades compute for memory).
+- **Same data pipeline as the baseline:** identical `src/data/transforms.py` (96^3 patches, same
+  HU window/spacing) and identical fixed-seed 80/20 split (`src/data/dataset.py`) — the encoder
+  is the only thing that differs between the two runs.
+- **Memory vs. baseline:** `batch_size=1` (vs. the baseline's 2) purely as an L4 headroom
+  safeguard for Swin UNETR's heavier attention activations at the same patch size; `train.py`
+  now also uses mixed precision (autocast + GradScaler) for both models, added for the same
+  memory reason (does not affect the already-saved baseline_unet_v1 result).
+- **Smoke test only:** `max_epochs=2` — purpose is to confirm the run fits in L4 memory and
+  completes end-to-end, not to produce a comparable result yet.

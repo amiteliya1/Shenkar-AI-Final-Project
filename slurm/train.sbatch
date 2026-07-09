@@ -1,15 +1,15 @@
 #!/bin/bash
-# Trains a segmentation model on the gpu partition using the project's .venv.
+# Trains any model supported by src/train.py's TrainConfig.model (currently
+# "unet" or "swin_unetr") on the gpu partition, using the project's .venv.
+# Config-driven and model-agnostic -- renamed from train_baseline.sbatch since
+# it's no longer specific to the baseline.
 #
 # Usage:
-#   sbatch slurm/train_baseline.sbatch [path-to-config.yaml]
+#   sbatch slurm/train.sbatch [path-to-config.yaml]
 # Defaults to configs/baseline_unet.yaml if no config is given, e.g.:
-#   sbatch slurm/train_baseline.sbatch configs/baseline_unet_smoketest.yaml
+#   sbatch slurm/train.sbatch configs/swin_unetr_smoketest.yaml
 #
-# NOTE: --gres=gpu:L4:1 assumes the cluster's GRES name for an L4 GPU is
-# literally "L4" -- verify with `sinfo -o "%P %G"` or `scontrol show partition gpu`
-# and adjust if the cluster uses a different string (e.g. "l4", "nvidia_l4",
-# or plain --gres=gpu:1 if the gpu partition is L4-only already).
+# --gres=gpu:L4:1 is confirmed working (Slurm job 316, baseline U-Net run).
 #
 # --cpus-per-task=4 matches num_workers=4 in the config files -- keep these in
 # sync if you change one.

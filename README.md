@@ -26,6 +26,7 @@ experiments/        logged results (CSV) and plots per run
 reports/            related_work.md, experiment_log.md
 notebooks/          exploratory notebooks and figures for the presentation
 outputs/            checkpoints and predictions (gitignored)
+slurm/              sbatch scripts for running on the Shenkar GPU server
 ```
 
 ## Setup (on the university cluster)
@@ -63,16 +64,32 @@ python -m src.data.visualize_sample --data-dir data --index 0
 
 ```bash
 python -m src.train --config configs/baseline_unet.yaml
-python -m src.train --config configs/swin_unetr_base.yaml   # Day 5, not implemented yet
+python -m src.train --config configs/swin_unetr_smoketest.yaml
 python -m src.evaluate --config configs/swin_unetr_base.yaml --checkpoint outputs/<run_name>/best_model.pt  # Day 7, not implemented yet
 ```
 
 Each run writes its logs/metrics to `experiments/<run_name>/` and its checkpoint to
 `outputs/<run_name>/`.
 
+## Running on Slurm (Shenkar GPU server)
+
+```bash
+mkdir -p SlurmLogs        # Slurm does not create missing --output/--error directories
+sbatch slurm/train.sbatch configs/baseline_unet.yaml           # or any other config
+squeue -u $USER
+tail -f SlurmLogs/segmentation_train_<jobid>.out
+```
+`slurm/train.sbatch` requests the `gpu` partition, 1x NVIDIA L4, and activates `.venv` before
+calling `src.train` with whatever config path is passed as its argument (defaults to
+`configs/baseline_unet.yaml`) — the same script runs every model, since model choice lives in
+the config file, not the script.
+
 ## Status
 
 - [x] Day 1: repo scaffold, dataset download script, environment check
 - [x] Day 2: data pipeline (transforms, train/val split, sanity-check visualization)
-- [x] Day 3: baseline 3D U-Net + training script (implemented, not yet trained)
-- [ ] Day 4 onward: see `reports/experiment_log.md` and the approved project plan
+- [x] Day 3: baseline 3D U-Net + training script. First run (Slurm job 316, NVIDIA L4): best
+      val Dice 0.4749, early-stopped at epoch 75/100 — see `reports/experiment_log.md`. Notably
+      below the ~0.90+ published range for this task; root cause not yet confirmed.
+- [ ] Day 5: Swin UNETR model + smoke-test config added, not yet run — see below
+- [ ] Day 6 onward: see `reports/experiment_log.md` and the approved project plan

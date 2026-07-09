@@ -2,11 +2,18 @@
 so the same script trains both the baseline U-Net (Day 3) and Swin UNETR (Day 5).
 
     python -m src.train --config configs/baseline_unet.yaml
+    python -m src.train --config configs/swin_unetr_smoketest.yaml
 
 Optimizer/regularization follow Ch.3: Adam, weight decay (L2), Dropout (set
 inside the model), and Early Stopping on validation Dice. Underperforming
 runs should be analyzed via Ch.3's Bias-Variance tradeoff (train vs. val gap)
 in reports/experiment_log.md, not diagnosed here.
+
+Mixed precision (autocast + GradScaler) is used for both models: it's a
+no-risk speed/memory win for the U-Net, and close to a requirement for Swin
+UNETR's much heavier attention activations to fit on a single 24GB L4 at the
+same patch size as the baseline. This only affects future runs -- it does not
+touch or invalidate the already-saved baseline_unet_v1 checkpoint/results.
 """
 
 from __future__ import annotations
@@ -20,9 +27,11 @@ from monai.inferers import sliding_window_inference
 from monai.losses import DiceCELoss
 from monai.transforms import AsDiscrete
 from monai.utils import set_determinism
+from torch.cuda.amp import GradScaler, autocast
 
 from src.data.dataset import get_datasets
 from src.data.transforms import PATCH_SIZE
+from src.models.swin_unetr_model import build_swin_unetr
 from src.models.unet_baseline import build_unet
 from src.utils.config import TrainConfig
 from src.utils.logging import RunLogger
@@ -32,7 +41,9 @@ from src.utils.metrics import make_dice_metric
 def build_model(config: TrainConfig) -> torch.nn.Module:
     if config.model == "unet":
         return build_unet(dropout=config.dropout)
-    raise NotImplementedError(f"model '{config.model}' is not implemented yet (Swin UNETR lands on Day 5)")
+    if config.model == "swin_unetr":
+        return build_swin_unetr(dropout=config.dropout)
+    raise NotImplementedError(f"model '{config.model}' is not implemented")
 
 
 def train(config: TrainConfig) -> None:
@@ -57,6 +68,7 @@ def train(config: TrainConfig) -> None:
     optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
     loss_function = DiceCELoss(to_onehot_y=True, softmax=True, include_background=False)
     dice_metric = make_dice_metric()
+    scaler = GradScaler(enabled=device.type == "cuda")
     post_pred = AsDiscrete(argmax=True, to_onehot=2)
     post_label = AsDiscrete(to_onehot=2)
 
@@ -74,17 +86,19 @@ def train(config: TrainConfig) -> None:
         for batch in train_loader:
             inputs, labels = batch["image"].to(device), batch["label"].to(device)
             optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = loss_function(outputs, labels)
-            loss.backward()
-            optimizer.step()
+            with autocast(enabled=device.type == "cuda"):
+                outputs = model(inputs)
+                loss = loss_function(outputs, labels)
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
             epoch_loss += loss.item()
         epoch_loss /= max(len(train_loader), 1)
 
         val_dice = None
         if epoch % config.val_interval == 0:
             model.eval()
-            with torch.no_grad():
+            with torch.no_grad(), autocast(enabled=device.type == "cuda"):
                 for val_batch in val_loader:
                     val_inputs = val_batch["image"].to(device)
                     val_labels = val_batch["label"].to(device)
