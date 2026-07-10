@@ -1,0 +1,57 @@
+{
+  "run_name": "swin_unetr_v1",
+  "model": "swin_unetr",
+  "checkpoint": "outputs/swin_unetr_v1/best_model.pt",
+  "postprocess": "keep_largest_component",
+  "per_case": [
+    {
+      "case_id": "spleen_19.nii",
+      "dice": 0.9173169732093811,
+      "hd95": 7.0
+    },
+    {
+      "case_id": "spleen_28.nii",
+      "dice": 0.5339674353599548,
+      "hd95": 51.22499465942383
+    },
+    {
+      "case_id": "spleen_13.nii",
+      "dice": 0.9266321063041687,
+      "hd95": 4.582575798034668
+    },
+    {
+      "case_id": "spleen_41.nii",
+      "dice": 0.8361369967460632,
+      "hd95": 5.099019527435303
+    },
+    {
+      "case_id": "spleen_10.nii",
+      "dice": 0.8701729774475098,
+      "hd95": 6.78233003616333
+    },
+    {
+      "case_id": "spleen_44.nii",
+      "dice": 0.6465424299240112,
+      "hd95": 15.165750503540039
+    },
+    {
+      "case_id": "spleen_12.nii",
+      "dice": 0.8265920877456665,
+      "hd95": 10.770329475402832
+    },
+    {
+      "case_id": "spleen_25.nii",
+      "dice": 0.5617426633834839,
+      "hd95": 47.07440948486328
+    }
+  ],
+  "summary": {
+    "num_cases": 8,
+    "num_valid_dice": 8,
+    "mean_dice": 0.7648879587650299,
+    "std_dice": 0.1594465862982158,
+    "num_valid_hd95": 8,
+    "mean_hd95": 18.46242618560791,
+    "std_hd95": 19.276598129353335
+  }
+}
