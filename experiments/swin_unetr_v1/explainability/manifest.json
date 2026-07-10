@@ -1,0 +1,21 @@
+{
+  "run_name": "swin_unetr_v1",
+  "checkpoint": "outputs/swin_unetr_v1/best_model.pt",
+  "cases": {
+    "weak": {
+      "case_id": "spleen_25.nii",
+      "method": "grad-cam (model.swinViT deepest stage)",
+      "figure": "experiments/swin_unetr_v1/explainability/weak_spleen_25.nii.png"
+    },
+    "average": {
+      "case_id": "spleen_10.nii",
+      "method": "grad-cam (model.swinViT deepest stage)",
+      "figure": "experiments/swin_unetr_v1/explainability/average_spleen_10.nii.png"
+    },
+    "strong": {
+      "case_id": "spleen_12.nii",
+      "method": "grad-cam (model.swinViT deepest stage)",
+      "figure": "experiments/swin_unetr_v1/explainability/strong_spleen_12.nii.png"
+    }
+  }
+}
