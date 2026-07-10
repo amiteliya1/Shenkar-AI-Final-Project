@@ -174,3 +174,39 @@ recovered; resubmitting `sbatch slurm/train.sbatch configs/swin_unetr_base.yaml`
 `swin_unetr_v1` from epoch 1, now under the resume-capable code. Any *subsequent* cancellation
 of that new run will resume correctly. Same config/dataset/split/val_interval/max_epochs as
 before, so the eventual comparison with the baseline is unaffected by this restart.
+
+### swin_unetr_v1 — Swin UNETR — 2026-07-10 — COMPLETED (restart, resume-capable code)
+
+**Config:** `configs/swin_unetr_base.yaml`, same as job 322 — restarted from epoch 1 (job 322's
+progress could not be recovered, see above).
+
+**Result:** Early-stopped at epoch 55/100. Best validation Dice = **0.5353**. Checkpoint saved
+at `outputs/swin_unetr_v1/best_model.pt`.
+
+**Analysis:** Best Dice (0.5353) matches job 322's best-before-cancellation value exactly, and
+55 = 35 + 20 (`early_stopping_patience`) — consistent with the restart reproducing job 322's
+training dynamics deterministically up to the point job 322 was cut off (same seed, same data,
+same model, and the added checkpoint-saving code doesn't consume RNG state), then continuing
+past epoch 44 to plateau and trigger early stopping at epoch 55. This is a useful reproducibility
+check in its own right (Ch.3-relevant: same seed really does reproduce the same run). Swin
+UNETR's 0.5353 is above the baseline U-Net's 0.4749, but **both remain far below the ~0.90+
+published range for this task** — the open question from the baseline's entry (premature
+stopping vs. a shared pipeline issue) is still unresolved and now applies to both models, since
+they share the same data pipeline.
+
+**Decision:** Both models have a completed, checkpointed run under matched methodology. Next:
+`src/evaluate.py` (Day 7) to get Dice + HD95 on the shared validation split for a real
+apples-to-apples comparison — mean training-time val_dice from early stopping is a reasonable
+proxy but HD95 and the finalized per-case numbers are the actual comparison artifact for the
+report.
+
+## Day 7: evaluation script added — 2026-07-10
+
+`src/evaluate.py` implemented: loads a checkpoint (`--checkpoint`) for the model/data specified
+by a training config (`--config`), evaluates it on `src/data/dataset.py`'s exact validation
+split (no new split constructed) using the same preprocessing (`get_val_transforms()`) and the
+same `sliding_window_inference` settings training used, computing per-case and mean Dice + HD95
+(`src/utils/metrics.py`'s new `make_hd95_metric()`). Writes per-case and summary metrics as JSON
+to `experiments/<run_name>/eval_results.json` by default. `slurm/evaluate.sbatch` added to run
+it on the cluster (30-minute time limit — evaluation is forward-passes only, far cheaper than
+training). Not yet run — no results to record here yet.

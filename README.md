@@ -18,7 +18,7 @@ src/
   data/             dataset loading + MONAI transforms
   models/           baseline 3D U-Net and Swin UNETR wrappers
   train.py          training entrypoint (model + hyperparameters selected via a config file)
-  evaluate.py        Dice / Hausdorff95 evaluation on the validation/test split
+  evaluate.py       Dice / HD95 evaluation of a checkpoint on the validation split
   explainability/   Swin UNETR attention extraction and visualization
   utils/            metrics, logging, config loading
 configs/            one YAML file per experiment run
@@ -64,24 +64,38 @@ python -m src.data.visualize_sample --data-dir data --index 0
 
 ```bash
 python -m src.train --config configs/baseline_unet.yaml
-python -m src.train --config configs/swin_unetr_smoketest.yaml
-python -m src.evaluate --config configs/swin_unetr_base.yaml --checkpoint outputs/<run_name>/best_model.pt  # Day 7, not implemented yet
+python -m src.train --config configs/swin_unetr_base.yaml
 ```
 
 Each run writes its logs/metrics to `experiments/<run_name>/` and its checkpoint to
-`outputs/<run_name>/`.
+`outputs/<run_name>/`. If a run is interrupted (e.g. a Slurm time-limit cancellation),
+resubmitting the exact same command resumes automatically from
+`outputs/<run_name>/last_checkpoint.pt` instead of restarting from epoch 1.
+
+## Evaluating a trained model
+
+```bash
+python -m src.evaluate --config configs/baseline_unet.yaml --checkpoint outputs/baseline_unet_v1/best_model.pt
+python -m src.evaluate --config configs/swin_unetr_base.yaml --checkpoint outputs/swin_unetr_v1/best_model.pt
+```
+Computes mean Dice and HD95 (95th-percentile Hausdorff Distance) on the same validation split
+used during training (`src/data/dataset.py`'s fixed-seed 80/20 split — evaluation does not
+create a different one), for both the baseline and Swin UNETR, so the two are directly
+comparable. Writes per-case and summary metrics as JSON to `experiments/<run_name>/eval_results.json`
+by default (override with `--output`).
 
 ## Running on Slurm (Shenkar GPU server)
 
 ```bash
 mkdir -p SlurmLogs        # Slurm does not create missing --output/--error directories
-sbatch slurm/train.sbatch configs/baseline_unet.yaml           # or any other config
+sbatch slurm/train.sbatch configs/baseline_unet.yaml           # or any other training config
+sbatch slurm/evaluate.sbatch configs/baseline_unet.yaml outputs/baseline_unet_v1/best_model.pt
 squeue -u $USER
-tail -f SlurmLogs/segmentation_train_<jobid>.out
+tail -f SlurmLogs/segmentation_train_<jobid>.out   # or segmentation_eval_<jobid>.out
 ```
-`slurm/train.sbatch` requests the `gpu` partition, 1x NVIDIA L4, and activates `.venv` before
-calling `src.train` with whatever config path is passed as its argument (defaults to
-`configs/baseline_unet.yaml`) — the same script runs every model, since model choice lives in
+`slurm/train.sbatch` and `slurm/evaluate.sbatch` both request the `gpu` partition, 1x NVIDIA
+L4, and activate `.venv` before calling `src.train`/`src.evaluate` with whatever arguments are
+passed to `sbatch` — the same scripts run every model/checkpoint, since model choice lives in
 the config file, not the script.
 
 ## Status
@@ -91,10 +105,11 @@ the config file, not the script.
 - [x] Day 3: baseline 3D U-Net + training script. First run (Slurm job 316, NVIDIA L4): best
       val Dice 0.4749, early-stopped at epoch 75/100 — see `reports/experiment_log.md`. Notably
       below the ~0.90+ published range for this task; root cause not yet confirmed.
-- [x] Day 5: Swin UNETR model implemented; smoke test passed on NVIDIA L4 after fixing an
-      `img_size`/MONAI-version incompatibility (see `reports/experiment_log.md`).
-      Full run (Slurm job 322) reached val_dice 0.5353 at epoch 35 before being cancelled at
-      epoch 44/100 by a wall-clock time limit. `train.py` now supports resuming from
-      `outputs/<run_name>/last_checkpoint.pt`; job 322 predates this fix so it restarts from
-      epoch 1, but is now safe against future cancellations.
-- [ ] Day 6 onward: see `reports/experiment_log.md` and the approved project plan
+- [x] Day 5: Swin UNETR model implemented and fully trained. Job 322 (pre-resume-support code)
+      was cancelled by a Slurm time limit at epoch 44/100; after adding checkpoint-resume
+      support, the restarted `swin_unetr_v1` run completed, early-stopping at epoch 55 with
+      best val Dice **0.5353** — above the baseline's 0.4749, though not yet HD95-compared.
+      See `reports/experiment_log.md` for the full sequence.
+- [x] Day 7: `src/evaluate.py` added — computes Dice + HD95 for either checkpoint on the shared
+      validation split, writes per-case + summary JSON. Not yet run.
+- [ ] Day 8 onward: see `reports/experiment_log.md` and the approved project plan
