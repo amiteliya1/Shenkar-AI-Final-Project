@@ -84,6 +84,16 @@ create a different one), for both the baseline and Swin UNETR, so the two are di
 comparable. Writes per-case and summary metrics as JSON to `experiments/<run_name>/eval_results.json`
 by default (override with `--output`).
 
+Add `--postprocess` to additionally keep only the largest connected foreground component per
+case before scoring — a candidate fix for the false-positive-blob failure mode found in the Day
+7/Day 8 analysis (see `reports/experiment_log.md`). Writes to `eval_results_postprocessed.json`
+by default, so it never overwrites the raw result:
+
+```bash
+python -m src.evaluate --config configs/swin_unetr_base.yaml \
+    --checkpoint outputs/swin_unetr_v1/best_model.pt --postprocess
+```
+
 ## Explainability (Swin UNETR)
 
 ```bash

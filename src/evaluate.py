@@ -5,6 +5,12 @@
     python -m src.evaluate --config configs/swin_unetr_base.yaml \\
         --checkpoint outputs/swin_unetr_v1/best_model.pt
 
+Add --postprocess to additionally apply largest-connected-component
+postprocessing before scoring (see src/utils/metrics.py's
+make_largest_component_postprocess() and reports/experiment_log.md) --
+writes to eval_results_postprocessed.json by default so it never overwrites
+the raw result.
+
 Reuses train.py's build_model() (so both "unet" and "swin_unetr" are
 supported the same way training selects them) and dataset.py's
 get_datalists() (the same fixed-seed 80/20 split, same
@@ -30,10 +36,10 @@ from src.data.dataset import get_datalists
 from src.data.transforms import PATCH_SIZE, get_val_transforms
 from src.train import build_model
 from src.utils.config import TrainConfig
-from src.utils.metrics import make_dice_metric, make_hd95_metric
+from src.utils.metrics import make_dice_metric, make_hd95_metric, make_largest_component_postprocess
 
 
-def evaluate(config: TrainConfig, checkpoint_path: str, output_path: str) -> None:
+def evaluate(config: TrainConfig, checkpoint_path: str, output_path: str, postprocess: bool = False) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Same split, same preprocessing as train.py's validation set -- no new split created.
@@ -51,6 +57,7 @@ def evaluate(config: TrainConfig, checkpoint_path: str, output_path: str) -> Non
     hd95_metric = make_hd95_metric()
     post_pred = AsDiscrete(argmax=True, to_onehot=2)
     post_label = AsDiscrete(to_onehot=2)
+    keep_largest = make_largest_component_postprocess() if postprocess else None
 
     per_case = []
     with torch.no_grad(), autocast(enabled=device.type == "cuda"):
@@ -59,6 +66,8 @@ def evaluate(config: TrainConfig, checkpoint_path: str, output_path: str) -> Non
             labels = batch["label"].to(device)
             outputs = sliding_window_inference(inputs=inputs, roi_size=PATCH_SIZE, sw_batch_size=4, predictor=model)
             outputs = [post_pred(x) for x in decollate_batch(outputs)]
+            if keep_largest is not None:
+                outputs = [keep_largest(x) for x in outputs]
             labels = [post_label(x) for x in decollate_batch(labels)]
 
             dice_value = dice_metric(y_pred=outputs, y=labels).item()
@@ -93,6 +102,7 @@ def evaluate(config: TrainConfig, checkpoint_path: str, output_path: str) -> Non
         "run_name": config.run_name,
         "model": config.model,
         "checkpoint": str(checkpoint_path),
+        "postprocess": "keep_largest_component" if postprocess else None,
         "per_case": per_case,
         "summary": summary,
     }
@@ -119,8 +129,16 @@ if __name__ == "__main__":
     parser.add_argument("--config", required=True, help="Path to the YAML config the checkpoint was trained with")
     parser.add_argument("--checkpoint", required=True, help="Path to a best_model.pt checkpoint")
     parser.add_argument("--output", default=None, help="Defaults to experiments/<run_name>/eval_results.json")
+    parser.add_argument(
+        "--postprocess",
+        action="store_true",
+        help="Apply largest-connected-component postprocessing to each prediction before "
+        "scoring (candidate fix for stray false-positive blobs -- see reports/experiment_log.md). "
+        "Defaults --output to eval_results_postprocessed.json instead of overwriting the raw result.",
+    )
     args = parser.parse_args()
 
     train_config = TrainConfig.from_yaml(args.config)
-    output = args.output or f"experiments/{train_config.run_name}/eval_results.json"
-    evaluate(train_config, args.checkpoint, output)
+    default_name = "eval_results_postprocessed.json" if args.postprocess else "eval_results.json"
+    output = args.output or f"experiments/{train_config.run_name}/{default_name}"
+    evaluate(train_config, args.checkpoint, output, postprocess=args.postprocess)

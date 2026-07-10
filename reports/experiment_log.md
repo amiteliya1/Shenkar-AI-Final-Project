@@ -355,3 +355,33 @@ re-run of `attention_map.py` specifically on `spleen_41`/`spleen_44` (bypassing 
 selection) would let us see whether *their* false-positive blobs are visually similar to
 `spleen_25`'s, but is not required to move forward — the postprocessing experiment can be
 evaluated on Dice/HD95 directly regardless of whether we visualize those two specific cases first.
+
+## Pre-experiment setup (Day 9, before the postprocessing run)
+
+`src/evaluate.py --postprocess` added: applies MONAI's `KeepLargestConnectedComponent`
+(`src/utils/metrics.py`'s new `make_largest_component_postprocess()`) to each case's argmaxed
+prediction before scoring, discarding every connected foreground region except the single
+largest one. Purely post-hoc — no retraining, same checkpoint (`outputs/swin_unetr_v1/best_model.pt`),
+same validation split, same Dice/HD95 metrics — so it is a clean apples-to-apples "does this fix
+change the numbers" comparison against the existing `experiments/swin_unetr_v1/eval_results.json`.
+Writes to `experiments/swin_unetr_v1/eval_results_postprocessed.json` by default (never overwrites
+the raw result). Also wired into `slurm/evaluate.sbatch` via an optional 4th `postprocess` arg.
+
+**Hypothesis being tested:** if the Day 7/Day 8 finding is right — that Swin UNETR's high HD95
+(155.98mm mean, worse than the baseline's 154.25mm despite a Dice win) comes from stray,
+spatially disconnected false-positive blobs rather than a poorly-shaped boundary around a
+correctly-located spleen — then discarding every predicted component except the largest should
+substantially reduce HD95 (removing the far-away false-positive that dominates the worst-point
+distance) while leaving Dice roughly unchanged or only slightly lower (the discarded blobs are
+volumetrically small, per the Day 7 analysis, or Dice would already have been low on those
+cases). A result that *doesn't* show this pattern would suggest the true cause is something else
+(e.g. a genuinely misshapen boundary on the main component) and the false-positive-blob
+hypothesis needs revisiting.
+
+**To run (Shenkar, GPU required):**
+```bash
+sbatch slurm/evaluate.sbatch configs/swin_unetr_base.yaml outputs/swin_unetr_v1/best_model.pt "" postprocess
+```
+
+Not yet run — results will land in `experiments/swin_unetr_v1/eval_results_postprocessed.json`
+once it is.

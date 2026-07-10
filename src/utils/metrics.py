@@ -17,6 +17,7 @@ reimplementing this computation.
 """
 
 from monai.metrics import DiceMetric, HausdorffDistanceMetric
+from monai.transforms import KeepLargestConnectedComponent
 
 
 def make_dice_metric() -> DiceMetric:
@@ -30,3 +31,15 @@ def make_hd95_metric() -> HausdorffDistanceMetric:
     Undefined (inf) for a case where prediction or ground truth has no foreground
     voxels at all -- callers should handle that when summarizing across cases."""
     return HausdorffDistanceMetric(include_background=False, percentile=95, reduction="mean")
+
+
+def make_largest_component_postprocess() -> KeepLargestConnectedComponent:
+    """Keeps only the single largest connected foreground component per case,
+    discarding any smaller, spatially disconnected blobs.
+
+    Candidate fix for the Day 7/Day 8 finding (see reports/experiment_log.md):
+    Swin UNETR's HD95 blowups on spleen_41/spleen_44/spleen_25 all coincide
+    with a stray false-positive region distant from the true spleen, which
+    barely dents volumetric Dice but dominates a boundary metric like HD95.
+    Applied post-hoc to argmaxed, one-hot predictions -- no retraining needed."""
+    return KeepLargestConnectedComponent(applied_labels=[1], is_onehot=True)
