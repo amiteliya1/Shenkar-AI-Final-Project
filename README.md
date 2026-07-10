@@ -19,7 +19,7 @@ src/
   models/           baseline 3D U-Net and Swin UNETR wrappers
   train.py          training entrypoint (model + hyperparameters selected via a config file)
   evaluate.py       Dice / HD95 evaluation of a checkpoint on the validation split
-  explainability/   Swin UNETR attention extraction and visualization
+  explainability/   Swin UNETR Grad-CAM/saliency explainability (attention_map.py)
   utils/            metrics, logging, config loading
 configs/            one YAML file per experiment run
 experiments/        logged results (CSV) and plots per run
@@ -84,19 +84,36 @@ create a different one), for both the baseline and Swin UNETR, so the two are di
 comparable. Writes per-case and summary metrics as JSON to `experiments/<run_name>/eval_results.json`
 by default (override with `--output`).
 
+## Explainability (Swin UNETR)
+
+```bash
+python -m src.explainability.attention_map \
+    --config configs/swin_unetr_base.yaml --checkpoint outputs/swin_unetr_v1/best_model.pt
+```
+Generates a 5-panel figure (CT slice, ground truth, prediction, attention/importance heatmap,
+overlay) for the strong/average/weak validation cases, auto-selected by Dice from
+`experiments/swin_unetr_v1/eval_results.json`. Saved to `experiments/<run_name>/explainability/`,
+alongside a `manifest.json` recording which case got which label and which explanation method
+actually ran. **Method and limitations:** see the module docstring in
+`src/explainability/attention_map.py` and `reports/experiment_log.md` — briefly, this is
+Grad-CAM on the Swin encoder's deepest stage (an approximation of "what mattered," not the raw
+window-attention weights themselves), with an automatic fallback to input-gradient saliency if
+the installed MONAI version doesn't expose the expected internal attribute.
+
 ## Running on Slurm (Shenkar GPU server)
 
 ```bash
 mkdir -p SlurmLogs        # Slurm does not create missing --output/--error directories
 sbatch slurm/train.sbatch configs/baseline_unet.yaml           # or any other training config
 sbatch slurm/evaluate.sbatch configs/baseline_unet.yaml outputs/baseline_unet_v1/best_model.pt
+sbatch slurm/explain.sbatch                                     # defaults match swin_unetr_v1
 squeue -u $USER
-tail -f SlurmLogs/segmentation_train_<jobid>.out   # or segmentation_eval_<jobid>.out
+tail -f SlurmLogs/segmentation_train_<jobid>.out   # or _eval_/_explain_
 ```
-`slurm/train.sbatch` and `slurm/evaluate.sbatch` both request the `gpu` partition, 1x NVIDIA
-L4, and activate `.venv` before calling `src.train`/`src.evaluate` with whatever arguments are
-passed to `sbatch` — the same scripts run every model/checkpoint, since model choice lives in
-the config file, not the script.
+`slurm/train.sbatch`, `slurm/evaluate.sbatch`, and `slurm/explain.sbatch` all request the `gpu`
+partition, 1x NVIDIA L4, and activate `.venv` before calling the corresponding `src` module with
+whatever arguments are passed to `sbatch` — the same scripts run every model/checkpoint, since
+model choice lives in the config file, not the script.
 
 ## Status
 
@@ -115,4 +132,8 @@ the config file, not the script.
       Dice 0.5353 / mean HD95 156.0mm — Swin UNETR wins on Dice, HD95 is essentially tied (and
       more variable for Swin UNETR). Both far below the ~0.90+ / single-digit-mm published
       range for this task. Full analysis and conclusions in `reports/experiment_log.md`.
-- [ ] Day 8 onward: see `reports/experiment_log.md` and the approved project plan
+- [x] Day 8: `src/explainability/attention_map.py` added (Grad-CAM on the Swin encoder's
+      deepest stage, with an input-gradient-saliency fallback) — generates 5-panel figures for
+      the strong/average/weak validation cases. Not yet run; see
+      `experiments/swin_unetr_v1/explainability/` once it is.
+- [ ] Day 9 onward: see `reports/experiment_log.md` and the approved project plan

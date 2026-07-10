@@ -258,3 +258,41 @@ catches immediately.
    correctly-located spleen. Worth visualizing `spleen_41`/`spleen_44`'s predictions directly to
    confirm, and considering a largest-connected-component post-processing step (standard
    practice in medical segmentation specifically for this failure mode) as a candidate fix.
+
+## Day 8: explainability method — 2026-07-10
+
+`src/explainability/attention_map.py` implemented, generating a 5-panel figure (CT slice,
+ground truth, prediction, attention/importance heatmap, overlay) for the strong/average/weak
+Swin UNETR validation cases (chosen by Dice directly from `eval_results.json` — a data-grounded
+selection, not a guess; the "weak" and "strong" picks may well land on `spleen_41`/`spleen_44`
+from the finding above, which would make these figures a direct visual check of that hypothesis).
+
+**Method — chosen for safety, not just novelty:** Ch.6's actual attention weights
+(`Softmax(QK^T/sqrt(d_k))`) live inside MONAI's `SwinTransformer` internals (individual
+`WindowAttention` blocks), at a version-specific depth. Reaching into undocumented internals at
+that level is exactly what already broke this project once (the `img_size` incompatibility in
+`src/models/swin_unetr_model.py`, Day 5) — a second such break wouldn't be discovered until
+after a wasted Slurm submission, same as before. So this script works one level up instead: a
+forward hook on the stable, public `model.swinViT` attribute (the Swin encoder), producing a
+Grad-CAM heatmap (Selvaraju et al., 2017) from its deepest stage — weight each output channel
+by its average gradient w.r.t. the predicted spleen score, sum, ReLU, upsample. If
+`model.swinViT` doesn't exist on whatever MONAI version is installed, the script automatically
+falls back to plain input-gradient saliency (Simonyan et al., 2013), which needs nothing but
+the model's public `forward()` and therefore cannot break the same way. Whichever path actually
+fires is printed and stamped on every figure's title and in a saved `manifest.json`, so a result
+is never silently mislabeled as the other method.
+
+**Limitations (by design, not oversights):**
+- An approximation of "where the network's representation is most sensitive to the predicted
+  class," not the literal window-attention weights Swin UNETR computes internally.
+- The Grad-CAM path reads the deepest encoder stage, which is heavily downsampled (the 96^3
+  crop collapses to roughly 3^3 there) — coarse by construction, before upsampling smooths it.
+- Computed on a single 96^3 crop centered on the ground-truth spleen centroid, not the full
+  sliding-window volume the reported Dice/HD95 use (re-deriving a whole-volume heatmap would
+  mean reimplementing sliding-window stitching for intermediate activations). The prediction
+  panel is still the real sliding-window prediction, cropped to the same region, so it matches
+  the reported metrics.
+- Uses the ground-truth label to center the crop — valid for labeled validation cases, not a
+  deployment-time explanation method.
+
+Not yet run — figures will land under `experiments/swin_unetr_v1/explainability/` once it is.
