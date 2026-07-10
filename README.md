@@ -150,4 +150,11 @@ model choice lives in the config file, not the script.
       the average case is a clean example of the heatmap tracking the true organ. Figures and
       `manifest.json` in `experiments/swin_unetr_v1/explainability/`; full analysis in
       `reports/experiment_log.md`.
-- [ ] Day 9 onward: see `reports/experiment_log.md` and the approved project plan
+- [x] Day 9: `src/evaluate.py --postprocess` added (largest-connected-component cleanup) and run
+      on Swin UNETR — **mean Dice 0.5353 → 0.7649, mean HD95 155.98mm → 18.46mm**, every one of
+      8 validation cases improved on both metrics, strongly confirming the Day 7/Day 8
+      false-positive-blob hypothesis (`spleen_41`/`spleen_44`, the flagged HD95 outliers, saw the
+      largest HD95 drops: -252mm and -240mm). **Not yet applied to the baseline** — needed before
+      this can replace the final comparison table, so the two models stay on equal footing. See
+      `reports/experiment_log.md`.
+- [ ] Day 10 onward: see `reports/experiment_log.md` and the approved project plan

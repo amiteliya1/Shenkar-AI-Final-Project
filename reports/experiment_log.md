@@ -378,10 +378,50 @@ cases). A result that *doesn't* show this pattern would suggest the true cause i
 (e.g. a genuinely misshapen boundary on the main component) and the false-positive-blob
 hypothesis needs revisiting.
 
-**To run (Shenkar, GPU required):**
-```bash
-sbatch slurm/evaluate.sbatch configs/swin_unetr_base.yaml outputs/swin_unetr_v1/best_model.pt "" postprocess
-```
+### swin_unetr_v1 + largest-connected-component postprocessing — 2026-07-10 — COMPLETED
 
-Not yet run — results will land in `experiments/swin_unetr_v1/eval_results_postprocessed.json`
-once it is.
+**Config:** `python -m src.evaluate --config configs/swin_unetr_base.yaml --checkpoint
+outputs/swin_unetr_v1/best_model.pt --postprocess` (via `slurm/evaluate.sbatch ... postprocess`).
+Same checkpoint, split, and metrics as the raw `eval_results.json` — postprocessing only.
+
+**Result:** Mean Dice **0.5353 → 0.7649** (+0.230, +43% relative). Mean HD95 **155.98mm → 18.46mm**
+(-137.5mm, -88% relative). Every one of the 8 validation cases improved on *both* metrics
+simultaneously — no regressions:
+
+| Case | Dice (raw→pp) | HD95mm (raw→pp) |
+|---|---|---|
+| spleen_19 | 0.593 → 0.917 (+0.325) | 144.1 → 7.0 (-137.1) |
+| spleen_28 | 0.355 → 0.534 (+0.179) | 124.3 → 51.2 (-73.0) |
+| spleen_13 | 0.646 → 0.927 (+0.280) | 120.1 → 4.6 (-115.5) |
+| spleen_41 | 0.601 → 0.836 (+0.235) | 256.8 → 5.1 (-251.7) |
+| spleen_10 | 0.593 → 0.870 (+0.277) | 127.5 → 6.8 (-120.8) |
+| spleen_44 | 0.416 → 0.646 (+0.230) | 254.7 → 15.2 (-239.5) |
+| spleen_12 | 0.765 → 0.827 (+0.061) | 98.7 → 10.8 (-87.9) |
+| spleen_25 | 0.313 → 0.562 (+0.249) | 121.8 → 47.1 (-74.7) |
+
+**Analysis:** This is about as clean a confirmation of the false-positive-blob hypothesis as the
+data could give. `spleen_41` and `spleen_44` — the two cases Day 7 flagged for the HD95 blowup —
+get by far the largest HD95 drops (-251.7mm, -239.5mm), collapsing from "worst in the set" to
+single-digit mm, consistent with their error being almost entirely one or more stray blobs far
+from the true spleen rather than a poorly-shaped boundary. `spleen_25` — the Day 8 explainability
+"weak" case whose prediction panel visibly showed a disconnected red region with no ground-truth
+counterpart — also improves substantially on both metrics (+0.249 Dice, -74.7mm HD95), which is
+exactly what removing that visible blob should do. That every case (not just these three)
+improves on both metrics simultaneously indicates spurious small components were a pervasive
+issue across the whole validation set, not a one-off failure on a couple of hard cases. The
+post-postprocessing HD95 (18.46mm mean) is also now in a plausible range relative to the
+~single-digit-to-low-double-digit mm published for this task, versus ~155mm before — most of the
+gap to published numbers documented as an open question since Day 3 turns out to be explained by
+this specific, fixable postprocessing gap rather than a deeper modeling or pipeline defect.
+
+**Decision:** Adopt largest-connected-component postprocessing for Swin UNETR's reported numbers
+going forward — it is a strict improvement with no observed downside on this validation set, and
+directly targets a failure mode independently confirmed via the eval metrics (Day 7), a
+qualitative figure (Day 8), and now this controlled before/after comparison. **Open item before
+this becomes the final headline comparison:** the baseline 3D U-Net's raw HD95 (154.25mm) is
+essentially as bad as Swin UNETR's pre-postprocessing number, which raises the same question for
+it — is the baseline *also* producing stray false-positive components that this same fix would
+clean up? Postprocessing has only been evaluated on Swin UNETR so far; applying it unevenly (one
+model postprocessed, one not) would break the project's fair-comparison discipline maintained
+since Day 5. Next: run `--postprocess` on `baseline_unet_v1` too before updating the final
+comparison table in this log or in any report/presentation numbers.
