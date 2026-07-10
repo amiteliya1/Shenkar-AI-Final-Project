@@ -25,6 +25,7 @@ configs/            one YAML file per experiment run
 experiments/        logged results (CSV) and plots per run
 reports/            related_work.md, experiment_log.md
 notebooks/          exploratory notebooks and figures for the presentation
+presentation/       build_presentation.py + generated final_presentation.pptx
 outputs/            checkpoints and predictions (gitignored)
 slurm/              sbatch scripts for running on the Shenkar GPU server
 ```
@@ -109,6 +110,20 @@ actually ran. **Method and limitations:** see the module docstring in
 Grad-CAM on the Swin encoder's deepest stage (an approximation of "what mattered," not the raw
 window-attention weights themselves), with an automatic fallback to input-gradient saliency if
 the installed MONAI version doesn't expose the expected internal attribute.
+
+## Presentation
+
+```bash
+pip install python-pptx   # local-only, not part of requirements.txt (no GPU/cluster dependency)
+python -m presentation.build_presentation
+```
+Regenerates `presentation/final_presentation.pptx` from this repo's actual results (reads
+`experiments/*/eval_results*.json` and the explainability figures directly, so it never drifts
+from the numbers in `reports/experiment_log.md`). Two slides are deliberately left as marked
+TODO placeholders rather than filled with guessed numbers: the learning-curve slide (pending
+`learning_curve.png` being pulled from the Shenkar server) and the final baseline-vs-Swin-UNETR
+comparison (pending the baseline's own `--postprocess` run). Re-run the script after either lands
+to auto-fill them.
 
 ## Running on Slurm (Shenkar GPU server)
 
