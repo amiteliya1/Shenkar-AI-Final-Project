@@ -295,4 +295,63 @@ is never silently mislabeled as the other method.
 - Uses the ground-truth label to center the crop — valid for labeled validation cases, not a
   deployment-time explanation method.
 
-Not yet run — figures will land under `experiments/swin_unetr_v1/explainability/` once it is.
+### Explainability run — 2026-07-10 — COMPLETED (Slurm, `slurm/explain.sbatch`)
+
+**Result:** All three cases ran the primary Grad-CAM path (`model.swinViT` was present on the
+installed MONAI version — the saliency fallback never triggered), per `manifest.json`:
+
+| Label | Case | Dice | HD95 (mm) | Method |
+|---|---|---|---|---|
+| weak | spleen_25 | 0.313 | 121.8 | grad-cam |
+| average | spleen_10 | 0.593 | 127.5 | grad-cam |
+| strong | spleen_12 | 0.765 | 98.7 | grad-cam |
+
+**Analysis:**
+
+1. **Auto-selection picks by Dice, not HD95 — so it missed the cases the Day 7 finding actually
+   flagged.** The weak/average/strong logic selects the min/max/closest-to-mean *Dice* case from
+   `eval_results.json`. `spleen_41` and `spleen_44` — the two cases Day 7 singled out for the
+   HD95 blowup (Dice went up, HD95 got far worse: 194→257mm and 185→255mm) — are Dice 0.601 and
+   0.416 respectively, unremarkable enough on Dice alone that neither was auto-selected here.
+   This is a real limitation of Dice-only case selection, not a bug: it answers "show me a
+   typical success/failure," not "show me the case with the worst boundary error." Worth a
+   manual follow-up (see Decision below).
+
+2. **The weak case (spleen_25) independently confirms the "stray false-positive blob"
+   hypothesis from Day 7 — on a different case than originally guessed.** Its prediction panel
+   shows the model correctly covering the left portion of the true spleen, *plus* a second,
+   spatially separate red region with no corresponding ground-truth label at all. That's a
+   direct visual instance of the exact failure mode inferred indirectly from the Dice/HD95 gap
+   in the Day 7 analysis (good volumetric overlap coexisting with a disconnected false-positive
+   region that a boundary metric would punish hard) — now confirmed by eye, and evidently not
+   confined to `spleen_41`/`spleen_44` alone.
+
+3. **The average case (spleen_10) is the cleanest evidence the explainability method is doing
+   its job.** The Grad-CAM heatmap's single hot region sits directly over the true spleen body,
+   and the prediction closely tracks the ground-truth boundary in this slice. This is the figure
+   to lead with in the presentation as "the model is attending to the right organ."
+
+4. **The strong case (spleen_12, highest Dice of the three) visually undershoots the ground
+   truth in this slice** — the prediction misses a substantial chunk of the crescent at both
+   ends, despite having the best *volumetric* Dice (0.765) of the three. Reminder that a single
+   2D slice isn't representative of full 3D overlap (the reported Dice is over the whole volume),
+   and that "strong by Dice" doesn't guarantee a visually complete mask in every slice. The
+   heatmap's hot region concentrates on the organ's core and cools toward the boundary, roughly
+   consistent with the under-segmentation being a boundary-confidence issue rather than the model
+   losing track of the organ.
+
+5. **All three heatmaps are smooth, low-resolution blobs, as anticipated in the module
+   docstring** — expected, since the deepest Swin stage collapses the 96^3 crop to roughly 3^3
+   before upsampling. They're good enough to answer "is the model looking at roughly the right
+   region" (yes, in all three cases) but not to explain slice-precise boundary decisions — this
+   matches the limitation already documented before the run, not a surprise found after it.
+
+**Decision:** Figures and `manifest.json` committed under `experiments/swin_unetr_v1/explainability/`.
+The Day 7 false-positive-blob hypothesis is now visually supported (point 2 above), which
+strengthens the case for trying largest-connected-component postprocessing as a follow-up fix —
+still the leading candidate from Day 7, now with two independent cases (`spleen_25` here,
+`spleen_41`/`spleen_44` from Day 7) suggesting the same failure mode rather than one. A targeted
+re-run of `attention_map.py` specifically on `spleen_41`/`spleen_44` (bypassing the auto Dice-based
+selection) would let us see whether *their* false-positive blobs are visually similar to
+`spleen_25`'s, but is not required to move forward — the postprocessing experiment can be
+evaluated on Dice/HD95 directly regardless of whether we visualize those two specific cases first.

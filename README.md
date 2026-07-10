@@ -133,7 +133,11 @@ model choice lives in the config file, not the script.
       more variable for Swin UNETR). Both far below the ~0.90+ / single-digit-mm published
       range for this task. Full analysis and conclusions in `reports/experiment_log.md`.
 - [x] Day 8: `src/explainability/attention_map.py` added (Grad-CAM on the Swin encoder's
-      deepest stage, with an input-gradient-saliency fallback) — generates 5-panel figures for
-      the strong/average/weak validation cases. Not yet run; see
-      `experiments/swin_unetr_v1/explainability/` once it is.
+      deepest stage, with an input-gradient-saliency fallback) and run on the strong/average/weak
+      validation cases (`spleen_12`/`spleen_10`/`spleen_25`) — all three used Grad-CAM, the
+      saliency fallback never triggered. The weak case visually confirms the Day 7 hypothesis
+      that Swin UNETR's HD95 blowups come from stray false-positive blobs, not boundary error;
+      the average case is a clean example of the heatmap tracking the true organ. Figures and
+      `manifest.json` in `experiments/swin_unetr_v1/explainability/`; full analysis in
+      `reports/experiment_log.md`.
 - [ ] Day 9 onward: see `reports/experiment_log.md` and the approved project plan
