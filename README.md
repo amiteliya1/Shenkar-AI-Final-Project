@@ -110,6 +110,9 @@ the config file, not the script.
       support, the restarted `swin_unetr_v1` run completed, early-stopping at epoch 55 with
       best val Dice **0.5353** — above the baseline's 0.4749, though not yet HD95-compared.
       See `reports/experiment_log.md` for the full sequence.
-- [x] Day 7: `src/evaluate.py` added — computes Dice + HD95 for either checkpoint on the shared
-      validation split, writes per-case + summary JSON. Not yet run.
+- [x] Day 7: `src/evaluate.py` added and run for both models on the shared validation split.
+      **Final comparison:** baseline mean Dice 0.4750 / mean HD95 154.3mm vs. Swin UNETR mean
+      Dice 0.5353 / mean HD95 156.0mm — Swin UNETR wins on Dice, HD95 is essentially tied (and
+      more variable for Swin UNETR). Both far below the ~0.90+ / single-digit-mm published
+      range for this task. Full analysis and conclusions in `reports/experiment_log.md`.
 - [ ] Day 8 onward: see `reports/experiment_log.md` and the approved project plan

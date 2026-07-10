@@ -209,4 +209,52 @@ same `sliding_window_inference` settings training used, computing per-case and m
 (`src/utils/metrics.py`'s new `make_hd95_metric()`). Writes per-case and summary metrics as JSON
 to `experiments/<run_name>/eval_results.json` by default. `slurm/evaluate.sbatch` added to run
 it on the cluster (30-minute time limit — evaluation is forward-passes only, far cheaper than
-training). Not yet run — no results to record here yet.
+training).
+
+## Final comparison: baseline 3D U-Net vs. Swin UNETR — 2026-07-10
+
+Source: `experiments/baseline_unet_v1/eval_results.json`, `experiments/swin_unetr_v1/eval_results.json`
+(both evaluated on the identical 8-case validation split by `src/evaluate.py`).
+
+| Model | Mean Dice | Std Dice | Mean HD95 (mm) | Std HD95 |
+|---|---|---|---|---|
+| Baseline 3D U-Net | 0.4750 | 0.2374 | 154.25 | 28.10 |
+| Swin UNETR        | 0.5353 | 0.1569 | 155.98 | 62.79 |
+
+**Dice:** Swin UNETR improves mean Dice by +0.060 (~13% relative) and is also more *consistent*
+across cases (std 0.157 vs. 0.237). Looking at per-case Dice, this is driven largely by rescuing
+the baseline's two worst cases: `spleen_41` (0.141 -> 0.601, +0.46) and `spleen_44`
+(0.157 -> 0.416, +0.26) — plausibly the baseline CNN's limited receptive field failing on an
+atypically-positioned/shaped spleen, where Swin UNETR's window-based global attention does
+better. Against that, Swin UNETR regresses on a few cases the baseline handled reasonably well
+(`spleen_25`: 0.458 -> 0.313, `spleen_28`: 0.471 -> 0.355).
+
+**HD95 is essentially flat (154 vs. 156mm) despite the Dice gain, and its variance more than
+doubled (std 28 vs. 63mm) — this is the key finding Dice alone would have hidden.** Both
+absolute numbers are enormous for an organ the size of a spleen (~10cm) — single-digit-to-low-
+double-digit mm HD95 is the published range for this task, so ~155mm indicates both models are
+placing at least some predicted voxels very far from the true spleen somewhere in the volume,
+not merely drawing an imperfect boundary around it. Most tellingly: on the exact two cases where
+Swin UNETR's Dice improved the most (`spleen_41`, `spleen_44`), its HD95 got *worse* than the
+baseline's (194 -> 257mm, 185 -> 255mm). Better overlap and worse worst-point distance on the
+same case is consistent with Swin UNETR predicting most of the true spleen correctly (driving
+Dice up) while also predicting one or more small false-positive blobs elsewhere in the
+abdomen (barely denting Dice, since Dice measures overlap in volume, but dominating HD95, which
+is sensitive to the single worst-matched surface point). This is precisely why HD95 was added
+alongside Dice in the first place (see `src/utils/metrics.py`) — a purely volumetric metric can
+look like a straightforward improvement while masking a localization failure a boundary metric
+catches immediately.
+
+**Conclusions:**
+1. Swin UNETR is the better model on this comparison by mean Dice, but the improvement is
+   partial and uneven, not a clean win — it trades some regressed cases for large rescues on
+   the baseline's worst failures.
+2. Neither model is close to the published ~0.90+ Dice / single-digit-mm HD95 range for
+   Task09_Spleen — both should be read as "which one fails less badly," not as a good result in
+   absolute terms. The open question from the baseline's entry above (premature early stopping
+   vs. a shared pipeline issue) is still unresolved for both models.
+3. New, data-grounded hypothesis for follow-up: the HD95 blowups look like stray false-positive
+   predictions outside the true spleen region rather than a poorly-shaped boundary around a
+   correctly-located spleen. Worth visualizing `spleen_41`/`spleen_44`'s predictions directly to
+   confirm, and considering a largest-connected-component post-processing step (standard
+   practice in medical segmentation specifically for this failure mode) as a candidate fix.
