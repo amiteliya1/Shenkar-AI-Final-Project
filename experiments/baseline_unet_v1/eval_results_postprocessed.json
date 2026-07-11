@@ -1,0 +1,57 @@
+{
+  "run_name": "baseline_unet_v1",
+  "model": "unet",
+  "checkpoint": "outputs/baseline_unet_v1/best_model.pt",
+  "postprocess": "keep_largest_component",
+  "per_case": [
+    {
+      "case_id": "spleen_19.nii",
+      "dice": 0.904633104801178,
+      "hd95": 2.8284270763397217
+    },
+    {
+      "case_id": "spleen_28.nii",
+      "dice": 0.8448575735092163,
+      "hd95": 4.242640495300293
+    },
+    {
+      "case_id": "spleen_13.nii",
+      "dice": 0.8942463397979736,
+      "hd95": 6.4031243324279785
+    },
+    {
+      "case_id": "spleen_41.nii",
+      "dice": 0.6339972615242004,
+      "hd95": 17.804492950439453
+    },
+    {
+      "case_id": "spleen_10.nii",
+      "dice": 0.8450192809104919,
+      "hd95": 6.7082037925720215
+    },
+    {
+      "case_id": "spleen_44.nii",
+      "dice": 0.0,
+      "hd95": 175.52407836914062
+    },
+    {
+      "case_id": "spleen_12.nii",
+      "dice": 0.9190314412117004,
+      "hd95": 3.316624879837036
+    },
+    {
+      "case_id": "spleen_25.nii",
+      "dice": 0.48396870493888855,
+      "hd95": 54.350711822509766
+    }
+  ],
+  "summary": {
+    "num_cases": 8,
+    "num_valid_dice": 8,
+    "mean_dice": 0.6907192133367062,
+    "std_dice": 0.3184633297362503,
+    "num_valid_hd95": 8,
+    "mean_hd95": 33.89728796482086,
+    "std_hd95": 59.77397054050887
+  }
+}
