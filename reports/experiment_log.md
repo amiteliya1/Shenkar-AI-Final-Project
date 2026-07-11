@@ -425,3 +425,76 @@ clean up? Postprocessing has only been evaluated on Swin UNETR so far; applying 
 model postprocessed, one not) would break the project's fair-comparison discipline maintained
 since Day 5. Next: run `--postprocess` on `baseline_unet_v1` too before updating the final
 comparison table in this log or in any report/presentation numbers.
+
+### baseline_unet_v1 + largest-connected-component postprocessing — 2026-07-11 — COMPLETED
+
+**Config:** `python -m src.evaluate --config configs/baseline_unet.yaml --checkpoint
+outputs/baseline_unet_v1/best_model.pt --postprocess` (via `slurm/evaluate.sbatch ...
+postprocess`). Same checkpoint, split, and metrics as the raw `eval_results.json` — postprocessing
+only, evaluated the same way as the Swin UNETR run above so the two stay comparable.
+
+**Result:** Mean Dice **0.4750 → 0.6907** (+0.216, +45% relative). Mean HD95 **154.25mm → 33.90mm**
+(-120.4mm, -78% relative). 7 of 8 cases improved on both metrics; one case (`spleen_44`)
+regressed on Dice:
+
+| Case | Dice (raw→pp) | HD95mm (raw→pp) |
+|---|---|---|
+| spleen_19 | 0.609 → 0.905 (+0.296) | 158.9 → 2.8 (-156.1) |
+| spleen_28 | 0.471 → 0.845 (+0.374) | 125.4 → 4.2 (-121.1) |
+| spleen_13 | 0.681 → 0.894 (+0.214) | 122.8 → 6.4 (-116.4) |
+| spleen_41 | 0.141 → 0.634 (+0.493) | 194.1 → 17.8 (-176.3) |
+| spleen_10 | 0.460 → 0.845 (+0.385) | 175.9 → 6.7 (-169.2) |
+| spleen_44 | 0.157 → **0.000 (-0.157)** | 184.9 → 175.5 (-9.4) |
+| spleen_12 | 0.823 → 0.919 (+0.096) | 138.3 → 3.3 (-135.0) |
+| spleen_25 | 0.458 → 0.484 (+0.026) | 133.6 → 54.4 (-79.3) |
+
+**Analysis:** In aggregate this replicates the Swin UNETR finding — most of the baseline's huge
+raw HD95 was also stray disconnected components, not boundary error, and discarding all but the
+largest predicted component fixes most of it. But unlike Swin UNETR (where all 8 cases improved
+on both metrics with no downside), `spleen_44` here is a genuine regression: Dice drops from a
+already-poor 0.157 all the way to 0.0, and HD95 barely moves (184.9 → 175.5mm, still enormous).
+The only way Dice can hit exactly 0.0 after keeping just the largest component is if that
+component doesn't overlap the true spleen at all — i.e. for this case the model's *biggest*
+predicted blob is itself a false positive, and the (smaller) piece that actually overlapped the
+true spleen was the one thrown away. This is the mirror image of the failure mode the fix targets:
+"keep the largest component" is only a safe heuristic when the largest component is usually the
+correct structure, which held for every Swin UNETR case but not for all baseline cases. It doesn't
+overturn the aggregate result (0.4750→0.6907 Dice, 154.25→33.90mm HD95 is still a large, real
+improvement driven by 7/8 cases), but it means the fix isn't unconditionally safe and should be
+reported as such rather than glossed over.
+
+**Decision:** Adopt postprocessing for the baseline's reported numbers too, so both models are
+evaluated identically for the final comparison (the project's fair-comparison discipline
+maintained since Day 5). Report the `spleen_44` regression explicitly wherever these numbers are
+used — it's a real, informative limitation of the fix, not a rounding artifact.
+
+## Final comparison (postprocessed): baseline 3D U-Net vs. Swin UNETR — 2026-07-11
+
+Source: `experiments/baseline_unet_v1/eval_results_postprocessed.json`,
+`experiments/swin_unetr_v1/eval_results_postprocessed.json` — both models, same validation split,
+same postprocessing (`KeepLargestConnectedComponent`), so this is the apples-to-apples final
+number the project set out to produce.
+
+| Model | Mean Dice | Std Dice | Mean HD95 (mm) | Std HD95 |
+|---|---|---|---|---|
+| Baseline 3D U-Net (postprocessed) | 0.6907 | 0.3185 | 33.90 | 59.77 |
+| Swin UNETR (postprocessed)        | 0.7649 | 0.1594 | 18.46 | 19.28 |
+
+**Conclusions:**
+1. Postprocessing closes most of the gap to the published range for both models (Dice moved from
+   "far below" to within reach of it; HD95 moved from ~150mm to 18-34mm), confirming the Day
+   7/8/9 diagnosis — the dominant failure mode for both architectures was stray disconnected
+   false-positive components, not fundamentally wrong segmentations.
+2. Applied evenly, Swin UNETR is still the better model on *both* metrics after postprocessing:
+   +0.0742 Dice (~11% relative) and -15.44mm HD95 (~46% relative) versus the baseline. The
+   pre-postprocessing story (Swin wins Dice, ties on HD95) does not hold once both are
+   postprocessed — Swin now wins clearly on both axes.
+3. Swin UNETR's postprocessed std HD95 (19.28) is also much tighter than the baseline's (59.77),
+   which is inflated by `spleen_44`'s regression (175.5mm, by far the largest remaining error in
+   either model's postprocessed results) — a second, independent sign that Swin UNETR's
+   underlying predictions are more reliably localized even before this fix is applied.
+4. The one caveat: postprocessing is not unconditionally safe (see `spleen_44` above) — it
+   assumes the largest predicted component is usually the correct structure, which held for all 8
+   Swin UNETR cases but not for the baseline's worst case. Any deployment of this fix should keep
+   that failure mode in mind, e.g. by flagging cases where the discarded components are
+   volumetrically large relative to the kept one.

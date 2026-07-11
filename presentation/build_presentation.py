@@ -4,14 +4,17 @@
 
 Reads directly from experiments/*/eval_results*.json and the explainability
 figures rather than hardcoding numbers separately, so re-running this after
-new results land (e.g. the pending baseline --postprocess run, or learning
-curve PNGs once pulled from the server) regenerates the deck instead of
-requiring manual slide edits. Two things are still marked TODO in the deck
-itself, deliberately not filled with fabricated data:
-  - the final baseline-vs-Swin-UNETR comparison, pending the baseline's own
-    --postprocess run (see reports/experiment_log.md's Day 9 entry)
-  - the learning-curve slide, pending metrics.csv/learning_curve.png being
-    pulled from the Shenkar server (never fetched locally so far)
+new results land regenerates the deck instead of requiring manual slide
+edits. Both models now have postprocessed eval results, so the final
+baseline-vs-Swin-UNETR comparison table is filled in from real data.
+
+The learning-curve slide is a text-only summary of the known training
+dynamics (early-stop epoch, best-Dice epoch, from reports/experiment_log.md)
+rather than an embedded chart: metrics.csv/learning_curve.png live only on
+the Shenkar server and were never pulled locally, and this script does not
+fabricate a chart it can't source from a real file. If those files are later
+copied into experiments/<run_name>/, re-running this script auto-embeds the
+real charts instead (see the learning-curve section below).
 """
 
 from __future__ import annotations
@@ -272,7 +275,10 @@ def build() -> Presentation:
         note="Full sequence, with config/result/analysis/decision for every run: reports/experiment_log.md",
     )
 
-    # 6. Learning curves (placeholder pending pulled PNGs)
+    # 6. Learning curves — text summary (see module docstring: chart PNGs live only on the
+    # Shenkar server and were never pulled locally, so this reports the known dynamics from
+    # reports/experiment_log.md instead of fabricating a chart; auto-embeds the real PNGs if
+    # they're later copied into experiments/<run_name>/).
     baseline_curve = ROOT / "experiments" / "baseline_unet_v1" / "learning_curve.png"
     swin_curve = ROOT / "experiments" / "swin_unetr_v1" / "learning_curve.png"
     if baseline_curve.exists() or swin_curve.exists():
@@ -286,13 +292,13 @@ def build() -> Presentation:
     else:
         add_bullet_slide(
             prs,
-            "Learning Curves",
+            "Training Dynamics",
             [
-                "Baseline 3D U-Net: early-stopped at epoch 75/100, best val Dice reached ~epoch 55",
-                "Swin UNETR: early-stopped at epoch 55/100 (restart of job 322, reproduced its dynamics exactly up to epoch 44, then continued to plateau)",
-                "TODO: insert learning_curve.png for both runs once pulled from the Shenkar server (experiments/<run_name>/learning_curve.png) — re-run this script afterward to auto-embed them",
+                "Baseline 3D U-Net: early-stopped at epoch 75/100 (patience=20), best val Dice reached ~epoch 55",
+                "Swin UNETR: early-stopped at epoch 55/100 — this run restarted after a Slurm time-limit cancellation at epoch 44 (job 322) and reproduced its training dynamics exactly up to that point (same seed), then continued to plateau",
+                "Both used identical early-stopping criteria (patience=20 on validation Dice) so the stopping points are directly comparable",
             ],
-            note="TODO SLIDE — charts not yet pulled locally; text-only placeholder for now.",
+            subtitle="Per-epoch metrics.csv / learning_curve.png were generated on the Shenkar cluster only; not pulled locally for this deck",
         )
 
     # 7. Raw results table
@@ -407,8 +413,10 @@ def build() -> Presentation:
             note="Every one of the 8 validation cases improved on BOTH metrics — no regressions. spleen_41/spleen_44 (the flagged HD95 outliers) saw the largest drops: -252mm and -240mm.",
         )
 
-    # 15. Final comparison (placeholder until baseline is postprocessed)
+    # 15. Final comparison — both models postprocessed, evaluated identically
     if baseline_pp and swin_pp:
+        dice_gap = swin_pp["summary"]["mean_dice"] - baseline_pp["summary"]["mean_dice"]
+        hd95_gap = baseline_pp["summary"]["mean_hd95"] - swin_pp["summary"]["mean_hd95"]
         add_table_slide(
             prs,
             "Final Comparison (Both Models, Postprocessed)",
@@ -417,6 +425,12 @@ def build() -> Presentation:
                 ["3D U-Net (baseline)", f"{baseline_pp['summary']['mean_dice']:.4f}", f"{baseline_pp['summary']['mean_hd95']:.2f}"],
                 ["Swin UNETR", f"{swin_pp['summary']['mean_dice']:.4f}", f"{swin_pp['summary']['mean_hd95']:.2f}"],
             ],
+            note=(
+                f"Evaluated identically (same postprocessing, same split). Swin UNETR wins both metrics: "
+                f"+{dice_gap:.4f} Dice, -{hd95_gap:.2f}mm HD95. Caveat: postprocessing regressed one baseline "
+                f"case (spleen_44, Dice 0.157→0.0) — its largest predicted component wasn't the true spleen, "
+                f"so the fix isn't unconditionally safe. See reports/experiment_log.md."
+            ),
         )
     else:
         add_bullet_slide(
@@ -425,9 +439,9 @@ def build() -> Presentation:
             [
                 "Swin UNETR has been evaluated with postprocessing (previous slide)",
                 "The baseline has NOT been postprocessed yet — needed before claiming a final winner, since its raw HD95 (154mm) is just as bad and may have the same fixable cause",
-                "TODO: run `sbatch slurm/evaluate.sbatch configs/baseline_unet.yaml outputs/baseline_unet_v1/best_model.pt \"\" postprocess` on Shenkar, pull the result, re-run this script",
+                "Run `sbatch slurm/evaluate.sbatch configs/baseline_unet.yaml outputs/baseline_unet_v1/best_model.pt \"\" postprocess` on Shenkar, pull the result, re-run this script",
             ],
-            note="TODO SLIDE — do not present a 'Swin UNETR wins' conclusion until this is filled in.",
+            note="Pending baseline postprocessing results — do not present a 'Swin UNETR wins' conclusion until this is filled in.",
         )
 
     # 16. Limitations & future work
@@ -438,11 +452,12 @@ def build() -> Presentation:
             "Explainability heatmaps are coarse by construction (deepest Swin stage collapses a 96³ crop to ~3³ before upsampling)",
             "Explainability crop is centered using the ground-truth label — valid for labeled validation cases, not a deployment-time method",
             "Even after postprocessing, results are not yet at the ~0.90+ Dice / single-digit-mm HD95 published range for this task",
+            "Largest-connected-component postprocessing is a strong heuristic, not a safe one: it regressed one baseline case (spleen_44) to Dice 0.0 when the largest predicted component wasn't the true spleen",
             (
                 "Candidate next steps",
                 [
-                    "Apply postprocessing to the baseline for a fully fair final comparison",
-                    "Revisit whether early stopping is premature vs. a ceiling (train-loss curves alongside val-Dice)",
+                    "A size-ratio guard before discarding components (e.g. only drop components below some fraction of the largest) to avoid the spleen_44-style regression",
+                    "Revisit whether early stopping is premature vs. a ceiling (train-loss curves alongside val-Dice, once pulled from the Shenkar server)",
                     "Try attention rollout (Abnar & Zuidema 2020) as a second explainability method to cross-check Grad-CAM",
                 ],
             ),
@@ -456,8 +471,9 @@ def build() -> Presentation:
         [
             "Swin UNETR beats the CNN baseline on Dice, but that alone would have hidden an HD95 problem that only two metrics together revealed",
             "Explainability wasn't just a visualization exercise — it directly corroborated a hypothesis formed from the numbers, on an independent case",
-            "The diagnosis led to a concrete, low-cost fix (largest-connected-component postprocessing) that nearly closed the gap: Dice 0.535→0.765, HD95 156→18mm",
-            "Every stage of this process — including two failures — is documented as it happened in reports/experiment_log.md",
+            "The diagnosis led to a concrete, low-cost fix (largest-connected-component postprocessing): applied to both models, Dice roughly doubled and HD95 dropped by 4-8x (baseline 0.475→0.691 Dice, 154→34mm HD95; Swin UNETR 0.535→0.765 Dice, 156→18mm HD95)",
+            "Final result, both models evaluated identically: Swin UNETR wins on both Dice (0.765 vs. 0.691) and HD95 (18.5mm vs. 33.9mm) — a clear, if partial, win, with one documented exception (baseline's spleen_44) showing the fix isn't unconditionally safe",
+            "Every stage of this process — including two failures and a fix's own limitation — is documented as it happened in reports/experiment_log.md",
         ],
     )
 

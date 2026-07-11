@@ -119,11 +119,13 @@ python -m presentation.build_presentation
 ```
 Regenerates `presentation/final_presentation.pptx` from this repo's actual results (reads
 `experiments/*/eval_results*.json` and the explainability figures directly, so it never drifts
-from the numbers in `reports/experiment_log.md`). Two slides are deliberately left as marked
-TODO placeholders rather than filled with guessed numbers: the learning-curve slide (pending
-`learning_curve.png` being pulled from the Shenkar server) and the final baseline-vs-Swin-UNETR
-comparison (pending the baseline's own `--postprocess` run). Re-run the script after either lands
-to auto-fill them.
+from the numbers in `reports/experiment_log.md`). The final baseline-vs-Swin-UNETR comparison
+table is auto-filled now that both models have been evaluated with `--postprocess`. The
+learning-curve slide is a text-only summary of the known training dynamics (early-stop epochs,
+best-Dice epochs from `reports/experiment_log.md`) rather than an embedded chart, since
+`metrics.csv`/`learning_curve.png` live only on the Shenkar server and were never pulled locally;
+if those files are later copied into `experiments/<run_name>/`, re-running the script will
+auto-embed the real charts instead.
 
 ## Running on Slurm (Shenkar GPU server)
 
@@ -169,7 +171,14 @@ model choice lives in the config file, not the script.
       on Swin UNETR — **mean Dice 0.5353 → 0.7649, mean HD95 155.98mm → 18.46mm**, every one of
       8 validation cases improved on both metrics, strongly confirming the Day 7/Day 8
       false-positive-blob hypothesis (`spleen_41`/`spleen_44`, the flagged HD95 outliers, saw the
-      largest HD95 drops: -252mm and -240mm). **Not yet applied to the baseline** — needed before
-      this can replace the final comparison table, so the two models stay on equal footing. See
-      `reports/experiment_log.md`.
-- [ ] Day 10 onward: see `reports/experiment_log.md` and the approved project plan
+      largest HD95 drops: -252mm and -240mm). See `reports/experiment_log.md`.
+- [x] Day 10: `--postprocess` applied to the baseline too — **mean Dice 0.4750 → 0.6907, mean
+      HD95 154.25mm → 33.90mm**, 7 of 8 cases improved on both metrics (one case, `spleen_44`,
+      regressed to Dice 0.0 — the model's largest predicted component wasn't the true spleen for
+      that case, a genuine limitation of the fix, not glossed over). **Final comparison, both
+      models postprocessed:** baseline mean Dice 0.6907 / mean HD95 33.90mm vs. Swin UNETR mean
+      Dice 0.7649 / mean HD95 18.46mm — Swin UNETR wins on *both* metrics once evaluated evenly
+      (unlike the pre-postprocessing picture, where Dice favored Swin UNETR but HD95 was a tie).
+      Full analysis in `reports/experiment_log.md`. Presentation regenerated
+      (`presentation/final_presentation.pptx`) with the final comparison table and no remaining
+      TODO slides — project ready for submission.

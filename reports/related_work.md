@@ -60,9 +60,12 @@ unexplored, which is one of the places this project makes its own contribution (
 We compare a CNN baseline (3D U-Net) against Swin UNETR on the same data pipeline and the same
 task (MSD Task09_Spleen), rather than only citing each architecture's numbers from its own paper
 on its own split — giving a same-conditions comparison instead of a literature-numbers
-comparison. Swin UNETR wins on Dice (0.535 vs. 0.475) but the two are essentially tied on raw
-HD95 (~155mm), which a Dice-only comparison — the norm in most segmentation papers — would have
-missed entirely (`reports/experiment_log.md`, Day 7).
+comparison. On raw predictions, Swin UNETR wins on Dice (0.535 vs. 0.475) but the two are
+essentially tied on raw HD95 (~155mm), which a Dice-only comparison — the norm in most
+segmentation papers — would have missed entirely (`reports/experiment_log.md`, Day 7). After the
+largest-connected-component postprocessing fix (Section below and Day 9-10), evaluated identically
+for both models, Swin UNETR wins clearly on *both* metrics: mean Dice 0.7649 vs. 0.6907, mean HD95
+18.46mm vs. 33.90mm.
 
 Explainability (Grad-CAM on the Swin encoder's deepest stage, Selvaraju et al. 2017, with an
 input-gradient-saliency fallback per Simonyan et al. 2013 — see Day 8) was chosen deliberately at
@@ -75,14 +78,21 @@ The project's clearest empirical contribution is diagnosing *why* HD95 stayed fl
 UNETR's Dice win, and fixing it: cross-referencing the per-case Dice/HD95 numbers (Day 7) against
 the explainability figures (Day 8) pointed to stray, spatially disconnected false-positive
 regions rather than boundary error, and a largest-connected-component postprocessing pass (Day 9)
-confirmed this directly — mean Dice rose from 0.535 to 0.765 and mean HD95 fell from 156mm to
-18mm, with every one of the 8 validation cases improving on both metrics simultaneously. This
-combination (a boundary metric alongside Dice, an explainability step, and a targeted
-postprocessing fix informed by both) is not something the reference architecture papers show,
+confirmed this directly for Swin UNETR — mean Dice rose from 0.535 to 0.765 and mean HD95 fell
+from 156mm to 18mm, with every one of the 8 validation cases improving on both metrics
+simultaneously. Applying the identical fix to the baseline (Day 10) mostly replicated this —
+mean Dice 0.475→0.691, mean HD95 154mm→34mm — but with one informative exception: one case
+(`spleen_44`) regressed to Dice 0.0, because for that case the model's *largest* predicted
+component was itself the false positive, not the true spleen. Reporting that exception alongside
+the aggregate win is deliberate: it shows the fix is a strong heuristic, not a universally safe
+one, and that distinction only surfaces by evaluating both models the same way rather than
+stopping at the first model that improved. This combination (a boundary metric alongside Dice, an
+explainability step, and a targeted postprocessing fix informed by both, evaluated evenly across
+both models including its failure case) is not something the reference architecture papers show,
 and is the concrete "own idea, compared against a baseline" the course asks for. Finally, per the
 course's process requirement, the full sequence — including a failed Swin UNETR smoke test (Day
 5, MONAI API incompatibility), a Slurm time-limit cancellation and the resume-capable fix that
-followed, and this postprocessing diagnosis — is documented as it happened in
+followed, and this postprocessing diagnosis on both models — is documented as it happened in
 `reports/experiment_log.md`, not reconstructed after the fact.
 
 ## References
@@ -106,6 +116,6 @@ followed, and this postprocessing diagnosis — is documented as it happened in
 9. Abnar, S., Zuidema, W. (2020). Quantifying Attention Flow in Transformers. *ACL*.
 10. Antonelli, M., et al. (2022). The Medical Segmentation Decathlon. *Nature Communications*.
 
-*(Section 5 finalized 2026-07-10 against actual Day 3-9 results. Remaining open item: double-check
-the citation format above against whatever reference-list style your course requires — not yet
-verified against a style guide.)*
+*(Section 5 finalized 2026-07-11 against actual Day 3-10 results, both models postprocessed.
+Remaining open item: double-check the citation format above against whatever reference-list style
+your course requires — not yet verified against a style guide.)*
